@@ -1,0 +1,5 @@
+Contig Counter
+
+This is a Python script that reads in a BLAST formatted result file and
+tabulates the number of "top matches" for each hit as reported by all the QUERYs
+in that file.
