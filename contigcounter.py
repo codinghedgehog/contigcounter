@@ -11,7 +11,7 @@
 import sys
 import re
 
-VERSION = '1.1'
+VERSION = '1.2.0'
 
 print "\nContig Counter v" + VERSION 
 
@@ -78,6 +78,7 @@ if not foundHeader:
     print "*** WARNING: File does not appear to be a BLAST result file.  Nothing processed.\n"
 else:
     print "\n===== FINAL REPORT =====\n"
+    print "BLAST file: " + sys.argv[1] + "\n"
     print "Match                                                                              #Hits"
     print "---------------------------------------------------------------------------------  -----\n"
     for result in sorted(results.items(),key=lambda x: x[1],reverse=True):
