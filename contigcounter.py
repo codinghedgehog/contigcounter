@@ -18,23 +18,28 @@ import sys
 import re
 import argparse
 
-VERSION = '1.3.1'
+VERSION = '1.3.2'
 
 # FUNCTIONS #
 
 def get_aggregation_key(blast_desc):
     '''Takes a blast result line and returns the key value used to store in the results hash'''
-    if args.key_fields is None:
-        # If no key field parameter was specified, default is the entire description.
-        return blast_desc
-    else:
-        blastKey=""
-        keyArray = args.key_fields.split(',')
-        blastDescArray = blast_desc.split()
-        for keyField in keyArray:
-            blastKey += " " + blastDescArray[int(keyField) - 1]
+    try:
+        if args.key_fields is None:
+            # If no key field parameter was specified, default is the entire description.
+            return blast_desc
+        else:
+            blastKey=""
+            keyArray = args.key_fields.split(',')
+            blastDescArray = blast_desc.split()
+            for keyField in keyArray:
+                blastKey += " " + blastDescArray[int(keyField) - 1]
 
-        return blastKey.strip()
+            return blastKey.strip()
+    except:
+        print "Failed to get key field for entry:"
+        print blast_desc
+        raise
 
 # MAIN #
 
