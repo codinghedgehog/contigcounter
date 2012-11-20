@@ -18,7 +18,7 @@ import sys
 import re
 import argparse
 
-VERSION = '1.3.0'
+VERSION = '1.3.1'
 
 # FUNCTIONS #
 
@@ -110,8 +110,8 @@ for line in blastFile:
             getNextHit=False
             seqString = hitMatch.group('seqstring').strip()
             seqKey = get_aggregation_key(seqString)
-            if debugMode: print "Tally added for " + seqString 
-            if seqString in results:
+            if debugMode: print "Tally added for " + seqKey
+            if seqKey in results:
                 results[seqKey] = results[seqKey] + 1
             else:
                 results[seqKey] = 1
