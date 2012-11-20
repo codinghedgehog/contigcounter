@@ -18,7 +18,7 @@ import sys
 import re
 import argparse
 
-VERSION = '1.3.2'
+VERSION = '1.3.3'
 
 # FUNCTIONS #
 
@@ -37,9 +37,9 @@ def get_aggregation_key(blast_desc):
 
             return blastKey.strip()
     except:
-        print "Failed to get key field for entry:"
+        print "Failed to get key field for entry (using full line):"
         print blast_desc
-        raise
+        return blast_desc
 
 # MAIN #
 
