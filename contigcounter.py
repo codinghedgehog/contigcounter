@@ -18,28 +18,47 @@ import sys
 import re
 import argparse
 
-VERSION = '1.3.3'
+VERSION = '1.4.0'
+
+# USER EXCEPTIONS #
+class GetBlastResultKeyError(Exception):
+    """Custom user exception raised when there is a failure to generate a composite (or default) key from a blast result line.
+       value = Error message
+       innerException = Original exception caught in the function.
+    """
+    def __init__(self,value,innerException = None):
+        self.value =value
+        self.innerException = innerException
+
+    def __str__(self):
+        return repr(self.value)
 
 # FUNCTIONS #
 
 def get_aggregation_key(blast_desc):
-    '''Takes a blast result line and returns the key value used to store in the results hash'''
+    """Takes a blast result line and returns the key value used to store in the results hash"""
+
+    # Don't want to recreate the keyArray variable each time -- do it once and store it as an attribute of this function.
     try:
-        if args.key_fields is None:
-            # If no key field parameter was specified, default is the entire description.
+        if not getattr(get_aggregation_key,"keyArray",False):
+            if args.key_fields is None:
+                # If no key field parameter was specified, default is the entire BLAST entry description.
+                get_aggregation_key.keyArray = None
+            else:
+                # Otherwise certain fields are meant to be used as the composite key for tallying.
+                get_aggregation_key.keyArray = args.key_fields.split(',')
+
+        blastKey=""
+        blastDescArray = blast_desc.split()
+        if get_aggregation_key.keyArray is None:
             return blast_desc
         else:
-            blastKey=""
-            keyArray = args.key_fields.split(',')
-            blastDescArray = blast_desc.split()
-            for keyField in keyArray:
+            for keyField in get_aggregation_key.keyArray:
                 blastKey += " " + blastDescArray[int(keyField) - 1]
-
             return blastKey.strip()
-    except:
-        print "Failed to get key field for entry (using full line):"
-        print blast_desc
-        return blast_desc
+    except Exception as e:
+        #print "*** WARNING: Failed to get key field for entry (using full line): " + blast_desc
+        raise GetBlastResultKeyError(blast_desc,e)
 
 # MAIN #
 
@@ -85,12 +104,18 @@ foundHeader = False
 newQuery = False
 getNextHit = False
 results=dict()
+lineCount = 0
+entryCount = 0
+warningCount = 0
+
+print "Processing " + blastFilename + "..."
 
 # Processing the file.
 # Verify that it is a BLAST result file (has a BLASTN header line)
 # Then grab the first match line a QUERY section. Build up a dictionary of counts for each hit.
 # TODO: Should consider refactoring this to use the State pattern.
 for line in blastFile:
+    lineCount += 1
     # Skip empty lines.
     line = line.rstrip()
     if re.match("^\s*$",line):
@@ -108,13 +133,28 @@ for line in blastFile:
             getNextHit = True
             if debugMode: print "Tabulating top hit for query " + queryMatch.group('queryName') 
     elif foundHeader and newQuery and getNextHit:
-        #print "Processing " + line
-        hitMatch = re.match("^\s*(?P<seqstring>.+\|.+?)\s{2,}(?P<score>.+)\s{2,}(?P<evalue>.+)$",line)
+        # Basically want to grab all but the last two space-delimited fields (i.e. the score and e-value) in the line.
+        hitMatch = re.match("^\s*(?P<seqstring>.+)\s+(?P<score>\S+)\s+(?P<evalue>\S+)$",line)
         if (hitMatch):
+            if debugMode: print "Match hit for seqstring: " + hitMatch.group('seqstring') 
+            entryCount += 1
             newQuery=False
             getNextHit=False
             seqString = hitMatch.group('seqstring').strip()
-            seqKey = get_aggregation_key(seqString)
+            try:
+                seqKey = get_aggregation_key(seqString)
+            except GetBlastResultKeyError as e:
+                seqKey = seqString
+                warningCount += 1
+                print "*** WARNING: Failed to get key field for entry on line {0}: {1}".format(lineCount, line)
+                print "(Will use full description as key)"
+                if debugMode:
+                    print "Matched seqString is " + seqString
+                    print "Exception details:"
+                    print "Error value: " + str(e.value)
+                    print "From original exception: ", e .innerException
+                    print str(e.innerException)
+
             if debugMode: print "Tally added for " + seqKey
             if seqKey in results:
                 results[seqKey] = results[seqKey] + 1
@@ -130,6 +170,11 @@ else:
     print "---------------------------------------------------------------------------------  -----\n"
     for result in sorted(results.items(),key=lambda x: x[1],reverse=True):
         print "{0:81}  {1}".format(result[0],str(result[1]))
+
+print ""
+
+print "Total results tallied: " + str(entryCount)
+print "Total warnings: " + str(warningCount)
 
 print ""
 
