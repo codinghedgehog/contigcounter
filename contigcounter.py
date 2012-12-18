@@ -2,7 +2,7 @@
 #
 # Contig Counter
 #
-# Usage contigcounter.py <BLAST result file> [-debug] [-kf #[,#]]
+# Usage contigcounter.py <BLAST result file> [-debug] [-kf #[,#]] [-exclude <exclude file>]
 #
 # This script takes a BLAST result file and tabulates the number of top hits for each match
 # across all the QUERYs in the file.
@@ -12,13 +12,40 @@
 # -debug = Debug flag for verbose reporting during processing.
 # -kf #[,#] = Key field indicator.  Default is the entire BLAST description (excluding score and evalue columns).
 # Each "field" is separated by spaces for purposes of counting fields.
+# -exclude <exclude file> = File containing terms to exclude, if found in the RAW hit description.  Case insensitive.
 #
 
 import sys
+import os
 import re
 import argparse
+import string
+import cStringIO
 
-VERSION = '1.4.0'
+VERSION = '1.5.0'
+
+# CLASSES #
+class HitResultObject(object):
+    """This class represents all the tallied hits found for a given sequence string or key field."""
+    def __init__(self,seqName,score,evalue):
+        self.Name = seqName
+        self.hits = 1
+        self.scores = [score]
+        self.evalues = [evalue]
+
+    def addTally(self,score,evalue):
+        self.hits += 1
+        self.scores.append(score)
+        self.evalues.append(evalue)
+
+    def getTally(self):
+        return self.hits
+
+    def getScores(self):
+        return self.scores
+
+    def getEvalues(self):
+        return self.evalues
 
 # USER EXCEPTIONS #
 class GetBlastResultKeyError(Exception):
@@ -70,9 +97,10 @@ argParser = argparse.ArgumentParser()
 # First argument is required and must be the file path/name to the BLAST file.
 argParser.add_argument("blast_file",help="The path and name of the input BLAST file to process") 
 
-# Optional parmeters include debug flag and key field indicator (for stats aggregation purposes)
+# Optional parmeters include debug flag, key field indicator (for stats aggregation purposes), and exclusion file.
 argParser.add_argument("-debug","--debug",action="store_true",help="Verbose output for debugging")
 argParser.add_argument("-kf","--key-fields",help="Specify which space-delimited fields from BLAST results to use for stats aggregation.  Default is the entire description.  Format is #[,#[,# .. ]] e.g. 1,3 for first and third \"words\" of description")
+argParser.add_argument("-exclude",help="File containing terms (one expression per line) to exclude, if found in the RAW hit description (not just the key fields).  Case insensitive.")
 
 args = argParser.parse_args()
 
@@ -88,7 +116,7 @@ except IOError as e:
     print "I/O error({0}): {1}".format(e.errno, e.strerror)
     sys.exit(1)
 except:
-    print "Unexpected error:", sys.exc_info()[0]
+    print "Unexpected error while opening BLAST file:", sys.exc_info()[0]
     raise
 
 
@@ -100,13 +128,43 @@ if args.key_fields and not re.match("\d+(,\d+)*",args.key_fields):
 # Set debug mode.
 debugMode = args.debug
 
+# Working variables.
 foundHeader = False
 newQuery = False
 getNextHit = False
-results=dict()
+results={}
 lineCount = 0
 entryCount = 0
 warningCount = 0
+exclusionRegex = None
+excludedResults={}
+
+# Load exclusion expressions.
+excludeFilename = args.exclude
+if excludeFilename:
+    print "Loading exclusion file " + excludeFilename + "..."
+
+    try:
+        excludeFile = open(excludeFilename,"r")
+    except IOError as e:
+        print "Unable to open exclusion file " + excludeFilename
+        print "I/O error({0}): {1}".format(e.errno, e.strerror)
+        sys.exit(1)
+    except:
+        print "Unexpected error while opening exclude file:", sys.exc_info()[0]
+        raise
+
+
+    # Build up the exclusion regular expression by writing it to a pseudo-file, for efficiency's sake.
+    exclusionFileStr = cStringIO.StringIO()
+    for excludeLine in excludeFile:
+        exclusionFileStr.write("({})|".format(re.escape(excludeLine.rstrip(os.linesep))))
+
+    exclusionRegex = exclusionFileStr.getvalue().rstrip('|')
+    excludeFile.close()
+
+if debugMode:
+    print "Exclusion regex is {}".format(exclusionRegex)
 
 print "Processing " + blastFilename + "..."
 
@@ -137,10 +195,21 @@ for line in blastFile:
         hitMatch = re.match("^\s*(?P<seqstring>.+)\s+(?P<score>\S+)\s+(?P<evalue>\S+)$",line)
         if (hitMatch):
             if debugMode: print "Match hit for seqstring: " + hitMatch.group('seqstring') 
-            entryCount += 1
             newQuery=False
             getNextHit=False
             seqString = hitMatch.group('seqstring').strip()
+            hitScore = hitMatch.group('score').strip()
+            hitEvalue = hitMatch.group('evalue').strip()
+            # Apply exclusion filter.
+            if exclusionRegex:
+                excludeMatch = re.search(exclusionRegex,seqString,re.IGNORECASE)
+                if excludeMatch:
+                    if excludeMatch.group(0) in excludedResults:
+                        excludedResults[excludeMatch.group(0)].addTally(hitScore,hitEvalue)
+                    else:
+                        excludedResults[excludeMatch.group(0)] = HitResultObject(excludeMatch.group(0),hitScore,hitEvalue)
+                    if debugMode: print "Excluding hit " + seqString + " (matched on exclude filter " + excludeMatch.group(0) + ")"
+                    continue
             try:
                 seqKey = get_aggregation_key(seqString)
             except GetBlastResultKeyError as e:
@@ -157,9 +226,9 @@ for line in blastFile:
 
             if debugMode: print "Tally added for " + seqKey
             if seqKey in results:
-                results[seqKey] = results[seqKey] + 1
+                results[seqKey].addTally(hitScore,hitEvalue)
             else:
-                results[seqKey] = 1
+                results[seqKey] = HitResultObject(seqKey,hitScore,hitEvalue)
 
 if not foundHeader:
     print "*** WARNING: File does not appear to be a BLAST result file.  Nothing processed.\n"
@@ -168,15 +237,26 @@ else:
     print "BLAST file: " + blastFilename + "\n"
     print "Match                                                                              #Hits"
     print "---------------------------------------------------------------------------------  -----\n"
-    for result in sorted(results.items(),key=lambda x: x[1],reverse=True):
-        print "{0:81}  {1}".format(result[0],str(result[1]))
+    for result in sorted(results.items(),key=lambda x: x[1].getTally(),reverse=True):
+        print "{0:81}  {1}".format(result[0],str(result[1].getTally()))
 
 print ""
 
-print "Total results tallied: " + str(entryCount)
+print "Total reported results: " + str(len(results))
+print "Total excluded: " + str(len(excludedResults))
 print "Total warnings: " + str(warningCount)
 
 print ""
+
+if excludedResults:
+    print "\n===== EXCLUSION REPORT =====\n"
+    print "Exclusion Filter Expression                                                        #Hits"
+    print "---------------------------------------------------------------------------------  -----\n"
+    for excludedResult in sorted(excludedResults.items(),key=lambda x: x[1].getTally(),reverse=True):
+        print "{0:81}  {1}".format(excludedResult[0],str(excludedResult[1].getTally()))
+
+print ""
+
 
 # Cleanup
 blastFile.close()
