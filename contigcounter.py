@@ -21,8 +21,9 @@ import re
 import argparse
 import string
 import cStringIO
+import math
 
-VERSION = '1.5.0'
+VERSION = '1.5.1'
 
 # CLASSES #
 class HitResultObject(object):
@@ -46,6 +47,12 @@ class HitResultObject(object):
 
     def getEvalues(self):
         return self.evalues
+
+    def getScoreAverage(self):
+        return float(sum(self.scores))/len(self.scores)
+
+    def getScoreSum(self):
+        return sum(self.scores)
 
 # USER EXCEPTIONS #
 class GetBlastResultKeyError(Exception):
@@ -86,6 +93,16 @@ def get_aggregation_key(blast_desc):
     except Exception as e:
         #print "*** WARNING: Failed to get key field for entry (using full line): " + blast_desc
         raise GetBlastResultKeyError(blast_desc,e)
+
+def numeric(numstr):
+    """Returns an int or float value represented by the input string, or ValueError if no conversion is possible."""
+    value=None
+    try:
+        value = int(numstr)
+    except ValueError:
+        value = float(numstr)
+
+    return value
 
 # MAIN #
 
@@ -198,8 +215,8 @@ for line in blastFile:
             newQuery=False
             getNextHit=False
             seqString = hitMatch.group('seqstring').strip()
-            hitScore = hitMatch.group('score').strip()
-            hitEvalue = hitMatch.group('evalue').strip()
+            hitScore = numeric(hitMatch.group('score').strip())
+            hitEvalue = numeric(hitMatch.group('evalue').strip())
             # Apply exclusion filter.
             if exclusionRegex:
                 excludeMatch = re.search(exclusionRegex,seqString,re.IGNORECASE)
@@ -235,15 +252,22 @@ if not foundHeader:
 else:
     print "\n===== FINAL REPORT =====\n"
     print "BLAST file: " + blastFilename + "\n"
-    print "Match                                                                              #Hits"
-    print "---------------------------------------------------------------------------------  -----\n"
+    print "Match                                                                #Hits  Score Sum  Score Avg"
+    print "-------------------------------------------------------------------  -----  ---------  ---------\n"
     for result in sorted(results.items(),key=lambda x: x[1].getTally(),reverse=True):
-        print "{0:81}  {1}".format(result[0],str(result[1].getTally()))
+        print "{:<67}  {:>5}  {:9.2f}  {:9.2f}".format(result[0],str(result[1].getTally()),result[1].getScoreSum(),result[1].getScoreAverage())
 
+# Now find the total, average, and standard deviation of the number of reported hits.
+totalHits = sum([ x[1].getTally() for x in results.items()])
+avgHits = float(totalHits) / len(results)
+stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/(len(results) - 1)))
 print ""
-
+print "Total hits: " + str(totalHits)
+print "Average hits: {:0.2f}".format(avgHits)
+print "Hit Standard Deviation: {:0.2f}".format(stddevHits)
+print ""
 print "Total reported results: " + str(len(results))
-print "Total excluded: " + str(len(excludedResults))
+print "Total excluded results: " + str(len(excludedResults))
 print "Total warnings: " + str(warningCount)
 
 print ""
