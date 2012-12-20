@@ -247,8 +247,14 @@ for line in blastFile:
             else:
                 results[seqKey] = HitResultObject(seqKey,hitScore,hitEvalue)
 
+# Cleanup
+blastFile.close()
+
+
+# Report
 if not foundHeader:
     print "*** WARNING: File does not appear to be a BLAST result file.  Nothing processed.\n"
+    sys.exit(1)
 else:
     print "\n===== FINAL REPORT =====\n"
     print "BLAST file: " + blastFilename + "\n"
@@ -287,6 +293,4 @@ if excludedResults:
 print ""
 
 
-# Cleanup
-blastFile.close()
 
