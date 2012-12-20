@@ -260,7 +260,12 @@ else:
 # Now find the total, average, and standard deviation of the number of reported hits.
 totalHits = sum([ x[1].getTally() for x in results.items()])
 avgHits = float(totalHits) / len(results)
-stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/(len(results) - 1)))
+
+if len(results) > 1:
+    stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/(len(results) - 1)))
+else:
+    stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/len(results)))
+
 print ""
 print "Total hits: " + str(totalHits)
 print "Average hits: {:0.2f}".format(avgHits)
