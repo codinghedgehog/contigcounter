@@ -23,7 +23,7 @@ import string
 import cStringIO
 import math
 
-VERSION = '1.5.1'
+VERSION = '1.5.2'
 
 # CLASSES #
 class HitResultObject(object):
@@ -250,50 +250,49 @@ for line in blastFile:
 # Cleanup
 blastFile.close()
 
-if lineCount > 0:
 
-    # Report
-    if not foundHeader:
-        print "*** WARNING: File does not appear to be a BLAST result file.  Nothing processed.\n"
-        sys.exit(1)
-    else:
-        print "\n===== FINAL REPORT =====\n"
-        print "BLAST file: " + blastFilename + "\n"
-        print "Match                                                                #Hits  Score Sum  Score Avg"
-        print "-------------------------------------------------------------------  -----  ---------  ---------\n"
-        for result in sorted(results.items(),key=lambda x: x[1].getTally(),reverse=True):
-            print "{:<67}  {:>5}  {:9.2f}  {:9.2f}".format(result[0],str(result[1].getTally()),result[1].getScoreSum(),result[1].getScoreAverage())
-
-    # Now find the total, average, and standard deviation of the number of reported hits.
-    totalHits = sum([ x[1].getTally() for x in results.items()])
-    avgHits = float(totalHits) / len(results)
-
-    if len(results) > 1:
-        stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/(len(results) - 1)))
-    else:
-        stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/len(results)))
-
-    print ""
-    print "Total hits: " + str(totalHits)
-    print "Average hits: {:0.2f}".format(avgHits)
-    print "Hit Standard Deviation: {:0.2f}".format(stddevHits)
-    print ""
-    print "Total reported results: " + str(len(results))
-    print "Total excluded results: " + str(len(excludedResults))
-    print "Total warnings: " + str(warningCount)
-
-    print ""
-
-    if excludedResults:
-        print "\n===== EXCLUSION REPORT =====\n"
-        print "Exclusion Filter Expression                                                        #Hits"
-        print "---------------------------------------------------------------------------------  -----\n"
-        for excludedResult in sorted(excludedResults.items(),key=lambda x: x[1].getTally(),reverse=True):
-            print "{0:81}  {1}".format(excludedResult[0],str(excludedResult[1].getTally()))
-
-    print ""
+# Report
+if not foundHeader:
+    print "*** WARNING: File does not appear to be a BLAST result file (expected header not found).  Nothing processed.\n"
+    sys.exit(1)
+elif len(results) == 0:
+    print "No results processed in " + blastFilename + ". No hits reported?"
+    sys.exit(0)
 else:
-    print "No lines processed in file " + blastFilename
-    print ""
+    print "\n===== FINAL REPORT =====\n"
+    print "BLAST file: " + blastFilename + "\n"
+    print "Match                                                                #Hits  Score Sum  Score Avg"
+    print "-------------------------------------------------------------------  -----  ---------  ---------\n"
+    for result in sorted(results.items(),key=lambda x: x[1].getTally(),reverse=True):
+        print "{:<67}  {:>5}  {:9.2f}  {:9.2f}".format(result[0],str(result[1].getTally()),result[1].getScoreSum(),result[1].getScoreAverage())
+
+# Now find the total, average, and standard deviation of the number of reported hits.
+totalHits = sum([ x[1].getTally() for x in results.items()])
+avgHits = float(totalHits) / len(results)
+
+if len(results) > 1:
+    stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/(len(results) - 1)))
+else:
+    stddevHits = math.sqrt(float(sum([(x[1].getTally() - avgHits)**2 for x in results.items()])/len(results)))
+
+print ""
+print "Total hits: " + str(totalHits)
+print "Average hits: {:0.2f}".format(avgHits)
+print "Hit Standard Deviation: {:0.2f}".format(stddevHits)
+print ""
+print "Total reported results: " + str(len(results))
+print "Total excluded results: " + str(len(excludedResults))
+print "Total warnings: " + str(warningCount)
+
+print ""
+
+if excludedResults:
+    print "\n===== EXCLUSION REPORT =====\n"
+    print "Exclusion Filter Expression                                                        #Hits"
+    print "---------------------------------------------------------------------------------  -----\n"
+    for excludedResult in sorted(excludedResults.items(),key=lambda x: x[1].getTally(),reverse=True):
+        print "{0:81}  {1}".format(excludedResult[0],str(excludedResult[1].getTally()))
+
+print ""
 
 
